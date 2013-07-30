@@ -1,0 +1,161 @@
+<%
+var log = new Log();
+
+
+var Absolute = require('modules/absolute.js').mvc;
+var Goose = require('modules/goose.js').goose;
+caramel = require('caramel');
+
+var layouts = {
+	"main/index" : "1-columns.hbs"
+};
+var caramelLessFunc = function(logics, resolve){
+	//Extracting the template from the view
+	var template;
+	if(isExists(logics.view)){
+		template = Handle.compile(resolve(getResource(logics.view)));
+	}
+
+	var context;
+	//If controller is empty the request is for the app index page
+	if(logics.isIndex){
+		if(appController.index!=undefined){
+			context = appController.index();	
+		}
+	}
+	if(isExists(logics.controller) && require(logics.controller)[logics.viewName] !=undefined){
+		context = require(logics.controller)[logics.viewName](appController);
+		log.info("Current context "+context);
+	}		
+	//Extracting the layout from the controller
+	var layout;
+	if(context!=undefined && layouts[logics.controllerName+"/"+logics.viewName]!=undefined){
+		layout = Handle.compile(getResource(resolve("layouts/"+layouts[logics.controllerName+"/"+logics.viewName])));
+	}
+	//If we can't find a controller as well as a view we are sending a 404 error
+	if(template==undefined && context==undefined){
+		try{
+			response.sendError(404);
+		}catch (e) {
+			new Log().debug(e);
+		}
+	}else{
+		var b = template(context);
+		if(layout==undefined){
+			//If the controller hasn't specified a layout
+			print(b);
+		}else{
+			//Now mixing the controller context with generated body template
+			print(layout(mergeRecursive({body:b}, context)));
+		}
+	}
+};
+function isExists(filename){
+	var f = new File(filename);
+	return f.isExists();
+}
+var mvController = new Absolute({
+	SERVER_URL :"/codewolf/",
+	IGNORE :["sso.jag", "login.jag", "logout.jag","test.jag"],
+	CONTROLLER_FUNCTION : function(ab){
+		var pageParams = ab.pageParams;
+		var configs = ab.configs;
+		var isExists = ab.isExists;
+		var asset = pageParams[0];
+		//Checking if the current request is for asset or whole
+		var controller;
+		var view;
+		var viewName;
+		var controllerName;
+		var appController;
+		var isIndex;
+		if(isExists("controllers/"+asset)){
+			controller = pageParams[1];
+			isIndex = controller=='';
+			view = "index";
+			if(pageParams.length>1 && pageParams[2]!=''){
+				view = pageParams[2];	
+			}
+			viewName = view;
+			controllerName = controller;		
+			view = "views/"+asset+"/"+controller+"/"+view;
+			controller = "controllers/"+asset+"/"+controller+".js";
+			if(isExists('/controllers/'+asset+'/app.js')){
+				appController =require('/controllers/'+asset+'/app.js');
+			}
+		}else{
+			controller = pageParams[0];
+			isIndex = controller=='';
+			view = "index";
+			if(pageParams.length>1 && pageParams[1]!=''){
+				view = pageParams[1];	
+			}
+			viewName = view;
+			controllerName = controller;
+			view = "views/"+controller+"/"+view;
+			controller = "controllers/"+controller+".js";
+			if(isExists('/controllers/app.js')){
+				appController =require('/controllers/app.js');
+			}
+		}
+		view = view+"."+configs.ENGINE;
+		return {viewName: viewName, controllerName : controllerName, controller: controller, view: view, appController:appController, isIndex: isIndex};
+	},
+	RENDER_FUNCTION: function(logics, resolve){
+		log.info(logics);
+		var context;
+		//If controller is empty the request is for the app index page
+		if(logics.isIndex){
+			if(logics.appController.index!=undefined){
+				context = logics.appController.index();	
+			}
+		}
+		if(isExists(logics.controller) && require(logics.controller)[logics.viewName] !=undefined){
+			context = require(logics.controller)[logics.viewName](caramel);
+			log.info("Current context "+context);
+		}
+	},
+	RESOLVE_VIEW: function(ab){
+		var pageParams = ab.pageParams;
+		var configs = ab.configs;
+		var isExists = ab.isExists;
+		var getResource = ab.getResource;
+		var theme = ab.theme;
+		var asset = pageParams[0];
+		//Checking if the current request is for asset or whole
+		var controller;
+		var view;
+		var viewName;
+		var isIndex;
+		if(pageParams.length==3){
+			controller = pageParams[1];
+			isIndex = controller=='';
+			view = "index";
+			if(pageParams.length>1 && pageParams[2]!=''){
+				view = pageParams[2];	
+			}
+			viewName = view;		
+			view = "views/"+asset+"/"+controller+"/"+view+"."+configs.ENGINE;
+			//overidding
+			if(!isExists(theme+"/"+view)){
+				view = "views/"+controller+"/"+viewName+"."+configs.ENGINE;
+			}
+		}else{
+			controller = pageParams[0];
+			isIndex = controller=='';
+			view = "index";
+			if(pageParams.length>1 && pageParams[1]!=''){
+				view = pageParams[1];	
+			}
+			viewName = view;
+			view = "views/"+controller+"/"+view+"."+configs.ENGINE;
+		}
+		return ab.getResource(theme+"/"+view);
+	},
+	RESOLVE : function(path){
+		return path;
+	}
+});
+application.put("absolute", mvController);
+mvController.route(request);
+%>
