@@ -1,4 +1,7 @@
-_URL contract for the Generic Publisher_
+codewolf
+========
+
+Basic architecture for Publisher - Caramel and Absolute mode
 
 /publisher/api - API route 
 /publisher/{assetType}/{controller}/{view}
